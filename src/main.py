@@ -12,12 +12,17 @@ def _json_response(context, status_code: int, payload: dict):
 
 
 def main(context):
-    client = (
-        Client()
-        .set_endpoint(os.environ.get("APPWRITE_FUNCTION_API_ENDPOINT"))
-        .set_project(os.environ.get("APPWRITE_FUNCTION_PROJECT_ID"))
-        .set_key(context.req.headers.get("x-appwrite-key"))
+    api_key = (
+        context.req.headers.get("x-appwrite-key")
+        or os.environ.get("APPWRITE_API_KEY")
+        or os.environ.get("APPWRITE_FUNCTION_API_KEY")
     )
+
+    client = Client()
+    client.set_endpoint(os.environ.get("APPWRITE_FUNCTION_API_ENDPOINT"))
+    client.set_project(os.environ.get("APPWRITE_FUNCTION_PROJECT_ID"))
+    if api_key:
+        client.set_key(api_key)
 
     users = Users(client)
     teams = Teams(client)
