@@ -83,6 +83,20 @@ def main(context):
         if not team_id:
             return _json_response(context, 500, {"success": False, "error": "Malformed team data"})
 
+        # If user is already a member, return success idempotently
+        try:
+            existing = teams.list_memberships(team_id=team_id, queries=[Query.equal('userId', user_id), Query.limit(1)])
+            memberships = existing.get('memberships') if isinstance(existing, dict) else None
+            if (isinstance(memberships, list) and memberships) or (isinstance(existing, dict) and existing.get('total', 0) > 0):
+                return _json_response(
+                    context,
+                    200,
+                    {"success": True, "teamId": team_id, "teamName": team_name, "alreadyMember": True},
+                )
+        except AppwriteException:
+            # If listing fails, continue to attempt add
+            pass
+
         # Add the user as a member immediately using server key
         membership = teams.create_membership(
             team_id=team_id,
@@ -105,6 +119,10 @@ def main(context):
         context.error("Join by code failed: " + repr(err))
         message = getattr(err, "message", None) or str(err)
         code = getattr(err, "code", 500) or 500
+        # Treat duplicate/already-member as success (idempotent)
+        if isinstance(code, int) and code == 409:
+            if isinstance(message, str) and 'already' in message.lower():
+                return _json_response(context, 200, {"success": True, "note": "Already a member"})
         status = int(code) if isinstance(code, int) else 500
         return _json_response(context, status, {"success": False, "error": message})
     except Exception as err:  # pragma: no cover
